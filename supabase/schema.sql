@@ -141,3 +141,16 @@ begin
          with check ((select auth.uid()) = user_id)', t);
   end loop;
 end $$;
+
+-- ---------- Table access for logged-in users (RLS still applies) ----------
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on
+  public.user_settings, public.accounts, public.payouts, public.expenses,
+  public.playbook_setups, public.trades, public.checklist_items,
+  public.checklist_checks, public.reminders
+to authenticated;
+revoke all on
+  public.user_settings, public.accounts, public.payouts, public.expenses,
+  public.playbook_setups, public.trades, public.checklist_items,
+  public.checklist_checks, public.reminders
+from anon;

@@ -63,7 +63,7 @@ export default function Accounts({ kind }) {
           <>
             <Stat icon={Sprout} label="Active" value={count('Active')} />
             <Stat icon={CircleCheck} label="Passed" value={count('Passed')} tone="pos" />
-            <Stat icon={CircleX} label="Failed" value={count('Failed')} tone="neg" />
+            <Stat icon={CircleX} label="Failed" value={count('Failed')} tone={count('Failed') ? 'neg' : ''} />
             <Stat icon={Flag} label="Pass rate" value={closedEvals ? pct(count('Passed') / closedEvals) : '—'} />
           </>
         ) : (
