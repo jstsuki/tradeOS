@@ -5,7 +5,7 @@ import {
 import { useTable } from '../lib/useTable'
 import { PROP_FIRMS } from '../lib/firms'
 import { money, signedMoney, sum, niceDate, pnlClass, pct, todayISO } from '../lib/format'
-import { accountMetrics, healthClass } from '../lib/metrics'
+import { accountMetrics, healthClass, FUNDED_BUFFER } from '../lib/metrics'
 import { Card, Toolbar, Stat, Bar, Empty, FormModal, Loading, ErrorNote, ProgressRing } from '../components/ui'
 
 const STATUS = {
@@ -20,8 +20,14 @@ const EVAL_SIZES = {
 }
 const EVAL_NICKNAMES = [1, 2, 3, 4, 5].map((n) => `LucidMaxx 50K #${n}`)
 
+const EOD_FIRMS = ['Lucid', 'Tradeify']
+
 const accountFields = (kind) => [
-  { name: 'firm', label: 'Prop firm', type: 'select', options: PROP_FIRMS, required: true, default: PROP_FIRMS[0] },
+  {
+    name: 'firm', label: 'Prop firm', type: 'select', options: PROP_FIRMS, required: true, default: PROP_FIRMS[0],
+    // Lucid and Tradeify: trailing end-of-day drawdown and no daily loss limit.
+    onPick: (v) => (EOD_FIRMS.includes(v) ? { drawdown_type: 'Trailing (EOD)', daily_loss_limit: '' } : {}),
+  },
   kind === 'evaluation'
     ? { name: 'label', label: 'Nickname / account #', type: 'select', options: EVAL_NICKNAMES }
     : { name: 'label', label: 'Nickname / account #', placeholder: 'e.g. 50K #2' },
@@ -32,13 +38,17 @@ const accountFields = (kind) => [
         hint: 'Fills in the profit target and max drawdown',
         onPick: (v) => EVAL_SIZES[Number(v)] || {},
       }
-    : { name: 'account_size', label: 'Account size ($)', type: 'number' },
+    : {
+        name: 'account_size', label: 'Account size ($)', type: 'number',
+        hint: '25K starts with a $1,000 buffer, 50K with $2,000',
+        onPick: (v) => (FUNDED_BUFFER[Number(v)] ? { max_drawdown: FUNDED_BUFFER[Number(v)] } : {}),
+      },
   { name: 'current_balance', label: 'Current balance ($)', type: 'number' },
   kind === 'evaluation'
     ? { name: 'profit_target', label: 'Profit target ($)', type: 'number' }
     : { name: 'profit_target', label: 'Next payout target ($)', type: 'number', hint: 'Profit needed before you can request a payout' },
   { name: 'max_drawdown', label: 'Max drawdown ($)', type: 'number' },
-  { name: 'daily_loss_limit', label: 'Daily loss limit ($)', type: 'number' },
+  { name: 'daily_loss_limit', label: 'Daily loss limit ($)', type: 'number', placeholder: 'None' },
   { name: 'drawdown_type', label: 'Drawdown type', type: 'select', options: ['Trailing (EOD)', 'Trailing (intraday)', 'Static'] },
   { name: 'status', label: 'Status', type: 'select', options: STATUS[kind], required: true, default: 'Active' },
   { name: 'start_date', label: 'Start date', type: 'date', default: todayISO() },
@@ -215,13 +225,21 @@ function AccountCard({ a, isEval, trades, payouts, onEdit, onPayout, onQuick }) 
           <Bar value={m.targetProgress} />
         </div>
       )}
-      {m.dd > 0 && (
+      {m.dd > 0 && isEval && (
         <div className="meter">
           <div className="meter-label">
-            <span><ShieldHalf size={12} /> {isEval ? 'Drawdown used' : 'Drawdown buffer'}</span>
+            <span><ShieldHalf size={12} /> Max drawdown</span>
+            <span><b>{money(m.dd)}</b> fixed</span>
+          </div>
+        </div>
+      )}
+      {m.dd > 0 && !isEval && (
+        <div className="meter">
+          <div className="meter-label">
+            <span><ShieldHalf size={12} /> Drawdown buffer</span>
             <span><b>{m.cushion != null ? money(m.cushion) : '—'}</b> left of {money(m.dd)}</span>
           </div>
-          <Bar tone={ddTone} value={isEval ? m.ddUsed : m.cushion != null ? Math.min(m.cushion / m.dd, 1) : 0} />
+          <Bar tone={ddTone} value={m.cushion != null ? Math.min(m.cushion / m.dd, 1) : 0} />
         </div>
       )}
       {(m.target === 0 || m.dd === 0 || m.bal == null) && (

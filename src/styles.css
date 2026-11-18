@@ -561,3 +561,15 @@ a.btn, a.link-btn { text-decoration: none; }
 .card.metric { position: relative; }
 .card-hint { position: absolute; top: 10px; right: 12px; margin: 0; }
 @media (hover: none), (max-width: 760px) { .card-hint { position: static; } }
+
+/* Copy groups: firm summaries on the Overview */
+.as-btn { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; width: 100%; cursor: pointer; }
+.firm-accounts { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+.firm-acct { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; font-size: 0.78rem; color: var(--ink-soft); text-decoration: none; padding: 5px 6px; border-radius: 8px; }
+.firm-acct:hover { background: rgba(255,255,255,0.04); }
+.firm-acct strong { color: var(--ink); font-size: 0.8rem; }
+.metric-sub span + span::before { content: ' · '; color: var(--ink-faint); }
+.copy-badge { font-size: 0.68rem; font-weight: 600; color: var(--violet); background: rgba(169,155,255,0.14); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.acct-breakdown { display: flex; flex-direction: column; gap: 4px; }
+.acct-breakdown div { display: flex; justify-content: space-between; font-size: 0.82rem; padding: 6px 10px; background: var(--card-3); border-radius: 8px; }
+.metric-sub { flex-wrap: wrap; }

@@ -7,7 +7,7 @@ import { BarChart, Bar as RBar, Cell, AreaChart, Area, XAxis, YAxis, Tooltip, Re
 import { useTable } from '../lib/useTable'
 import { signedMoney, money, sum, niceDate, pnlClass, todayISO, pct } from '../lib/format'
 import { addDays, parseISO } from '../lib/metrics'
-import { tradeFields } from '../lib/tradeForm'
+import { tradeFields, saveNewTrade, groupTrades, updateTrades, deleteTrades } from '../lib/tradeForm'
 import { Card, Toolbar, Stat, Empty, FormModal, Loading, ErrorNote, Donut, Drawer } from '../components/ui'
 import { C, chartTooltip, axis, shortMoney } from './chartTheme'
 
@@ -17,22 +17,33 @@ export default function Journal() {
   const accounts = useTable('accounts')
   const setups = useTable('playbook_setups', { ascending: true })
   const [modal, setModal] = useState(null)
-  const [detail, setDetail] = useState(null)
+  const [detail, setDetail] = useState(null) // key of the selected trade group
   const [acct, setAcct] = useState('')
   const [day, setDay] = useState(null)
 
-  const fields = tradeFields(accounts.rows, setups.rows, day)
+  const editingGroup = (modal?.group?.rows.length || 0) > 1
+  const fields = tradeFields(accounts.rows, setups.rows, day, { editingGroup })
 
-  const filtered = trades.rows.filter((t) => !acct || t.account_id === acct)
+  // Filter: one account, or a whole firm ("firm:Lucid")
+  const firmOf = Object.fromEntries(accounts.rows.map((a) => [a.id, a.firm]))
+  const firms = [...new Set(accounts.rows.map((a) => a.firm))].sort()
+  const filtered = trades.rows.filter((t) => !acct || (acct.startsWith('firm:') ? firmOf[t.account_id] === acct.slice(5) : t.account_id === acct))
   const shown = day ? filtered.filter((t) => t.trade_date === day) : filtered
   const nameOf = (list, id, f) => list.find((x) => x.id === id)?.[f]
+  const acctName = (id) => {
+    const a = accounts.rows.find((x) => x.id === id)
+    return a ? `${a.firm}${a.label ? ` · ${a.label}` : ''}` : 'Brokerage / personal'
+  }
 
-  const wins = filtered.filter((t) => Number(t.pnl) > 0)
-  const losses = filtered.filter((t) => Number(t.pnl) < 0)
-  const even = filtered.length - wins.length - losses.length
+  // A copy trade on 5 accounts is one execution: it counts once for win rate, its P&L is the total.
+  const execs = useMemo(() => groupTrades(filtered), [filtered])
+  const shownGroups = useMemo(() => groupTrades(shown), [shown])
+  const wins = execs.filter((g) => g.pnl > 0)
+  const losses = execs.filter((g) => g.pnl < 0)
+  const even = execs.length - wins.length - losses.length
   const net = sum(filtered, 'pnl')
-  const gw = sum(wins, 'pnl')
-  const gl = Math.abs(sum(losses, 'pnl'))
+  const gw = wins.reduce((t, g) => t + g.pnl, 0)
+  const gl = Math.abs(losses.reduce((t, g) => t + g.pnl, 0))
 
   const last30 = useMemo(() => {
     const from = addDays(todayISO(), -29)
@@ -41,21 +52,23 @@ export default function Journal() {
     return Object.keys(m).sort().map((d) => ({ d, label: parseISO(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), pnl: m[d] }))
   }, [filtered])
 
+  const detailGroup = detail ? execs.find((g) => g.key === detail) || shownGroups.find((g) => g.key === detail) : null
+
   const trend = useMemo(() => {
     let run = 0
-    return [...filtered]
-      .sort((a, b) => a.trade_date.localeCompare(b.trade_date) || a.created_at?.localeCompare(b.created_at))
-      .map((t, i) => {
-        run += Number(t.pnl)
-        return { n: i + 1, cumulative: run, date: niceDate(t.trade_date) }
+    return [...execs]
+      .sort((a, b) => a.first.trade_date.localeCompare(b.first.trade_date) || (a.first.created_at || '').localeCompare(b.first.created_at || ''))
+      .map((g, i) => {
+        run += g.pnl
+        return { n: i + 1, cumulative: run, date: niceDate(g.first.trade_date) }
       })
-  }, [filtered])
+  }, [execs])
 
   return (
     <div className="page">
       <div className="stats-row">
-        <Stat icon={Sprout} label="Net P&L" value={filtered.length ? signedMoney(net) : '—'} tone={pnlClass(net)} hint={`${filtered.length} trades`} />
-        <Stat icon={Percent} label="Win rate" value={filtered.length ? pct(wins.length / filtered.length) : '—'} hint={`${wins.length}W · ${losses.length}L${even ? ` · ${even} BE` : ''}`} />
+        <Stat icon={Sprout} label="Net P&L" value={filtered.length ? signedMoney(net) : '—'} tone={pnlClass(net)} hint={`${execs.length} trades${execs.length !== filtered.length ? ` · ${filtered.length} account fills` : ''}`} />
+        <Stat icon={Percent} label="Win rate" value={execs.length ? pct(wins.length / execs.length) : '—'} hint={`${wins.length}W · ${losses.length}L${even ? ` · ${even} BE` : ''}`} />
         <Stat icon={Scale} label="Profit factor" value={gl ? (gw / gl).toFixed(2) : gw ? '∞' : '—'} hint={gl ? 'Gross win ÷ gross loss' : 'Needs a losing trade'} />
         <Stat icon={Hash} label="Avg win / loss" value={wins.length && losses.length ? `${money(gw / wins.length)} / ${money(gl / losses.length)}` : '—'} hint={wins.length && losses.length ? `Ratio ${((gw / wins.length) / (gl / losses.length)).toFixed(2)}` : 'Needs wins and losses'} />
       </div>
@@ -63,6 +76,7 @@ export default function Journal() {
       <Toolbar actions={<button className="btn" onClick={() => setModal({})}><Plus size={15} /> Log trade</button>}>
         <select className="mini-select" value={acct} onChange={(e) => setAcct(e.target.value)} aria-label="Filter by account">
           <option value="">All accounts</option>
+          {firms.map((f) => <option key={f} value={`firm:${f}`}>All {f} accounts</option>)}
           {accounts.rows.map((a) => <option key={a.id} value={a.id}>{a.firm}{a.label ? ` · ${a.label}` : ''}</option>)}
         </select>
         {day && <button className="chip on" onClick={() => setDay(null)}>{niceDate(day)} ✕</button>}
@@ -74,7 +88,7 @@ export default function Journal() {
           <PnlCalendar trades={filtered} selected={day} onSelect={(d) => setDay(d === day ? null : d)} />
         </Card>
         <Card title="Win / loss split" icon={PieIcon}>
-          {filtered.length === 0 ? (
+          {execs.length === 0 ? (
             <Empty compact icon={PieIcon} title="No trades yet" />
           ) : (
             <div className="donut-wrap">
@@ -82,7 +96,7 @@ export default function Journal() {
                 size={140}
                 colors={[C.violet, C.pink, '#6F6A7D']}
                 data={[{ name: 'Wins', value: wins.length }, { name: 'Losses', value: losses.length }, { name: 'Breakeven', value: even }].filter((d) => d.value)}
-                center={<><span className="ring-value" style={{ fontSize: '1.1rem' }}>{pct(wins.length / filtered.length)}</span><span className="ring-sub">win rate</span></>}
+                center={<><span className="ring-value" style={{ fontSize: '1.1rem' }}>{pct(wins.length / execs.length)}</span><span className="ring-sub">win rate</span></>}
               />
               <div className="split-legend">
                 <div><i style={{ background: C.violet }} /> Wins <strong>{wins.length}</strong></div>
@@ -149,20 +163,20 @@ export default function Journal() {
             <Empty compact icon={NotebookPen} title={trades.rows.length ? 'No trades here' : 'Your journal is empty'} text={trades.rows.length ? null : 'Log your first real trade to start your history.'} action={!trades.rows.length && <button className="btn sm" onClick={() => setModal({})}><Plus size={14} /> Log trade</button>} />
           ) : (
             <div className="trade-list">
-              {shown.map((t) => (
-                <button key={t.id} className="trade-row" onClick={() => setDetail(t)}>
+              {shownGroups.map(({ key, first: t, rows, pnl }) => (
+                <button key={key} className="trade-row" onClick={() => setDetail(key)}>
                   <span className={`dir ${t.direction === 'Long' ? 'long' : 'short'}`}>
                     {t.direction === 'Long' ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
                   </span>
                   <div className="trade-main">
-                    <strong>{t.symbol}</strong>
-                    <small>{[niceDate(t.trade_date), nameOf(setups.rows, t.setup_id, 'name'), nameOf(accounts.rows, t.account_id, 'firm')].filter(Boolean).join(' · ')}</small>
+                    <strong>{t.symbol}{rows.length > 1 && <span className="copy-badge">×{rows.length}</span>}</strong>
+                    <small>{[niceDate(t.trade_date), nameOf(setups.rows, t.setup_id, 'name'), rows.length > 1 ? `${nameOf(accounts.rows, t.account_id, 'firm')} copy` : nameOf(accounts.rows, t.account_id, 'firm')].filter(Boolean).join(' · ')}</small>
                   </div>
                   <span className={`plan ${t.followed_plan ? 'ok' : 'off'}`} title={t.followed_plan ? 'Followed plan' : 'Broke plan'}>
                     {t.followed_plan ? <Check size={12} /> : <CircleAlert size={12} />}
                   </span>
                   <div className="trade-pnl">
-                    <strong className={pnlClass(Number(t.pnl))}>{signedMoney(t.pnl)}</strong>
+                    <strong className={pnlClass(pnl)}>{signedMoney(pnl)}</strong>
                     {t.r_multiple != null && <small>{Number(t.r_multiple) > 0 ? '+' : ''}{t.r_multiple}R</small>}
                   </div>
                 </button>
@@ -172,21 +186,31 @@ export default function Journal() {
         </Card>
       </div>
 
-      {detail && (
+      {detailGroup && (() => {
+        const detail = detailGroup.first
+        const many = detailGroup.rows.length > 1
+        return (
         <Drawer
           title={`${detail.symbol} · ${detail.direction}`}
           icon={<span className={`dir ${detail.direction === 'Long' ? 'long' : 'short'}`}>{detail.direction === 'Long' ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}</span>}
           onClose={() => setDetail(null)}
         >
           <div>
-            <div className="metric-label">Result</div>
-            <div className={`chart-total ${pnlClass(Number(detail.pnl))}`}>{signedMoney(detail.pnl)}</div>
-            <div className="metric-sub">{niceDate(detail.trade_date)}</div>
+            <div className="metric-label">{many ? `Total across ${detailGroup.rows.length} accounts` : 'Result'}</div>
+            <div className={`chart-total ${pnlClass(detailGroup.pnl)}`}>{signedMoney(detailGroup.pnl)}</div>
+            <div className="metric-sub">{niceDate(detail.trade_date)}{many ? ` · ${signedMoney(detail.pnl)} per account` : ''}</div>
           </div>
+          {many && (
+            <div className="acct-breakdown">
+              {detailGroup.rows.map((r) => (
+                <div key={r.id}><span>{acctName(r.account_id)}</span><strong className={pnlClass(Number(r.pnl))}>{signedMoney(r.pnl)}</strong></div>
+              ))}
+            </div>
+          )}
           <div className="detail-grid">
-            <div><small>Account</small><strong>{nameOf(accounts.rows, detail.account_id, 'firm') || 'Brokerage / personal'}</strong></div>
+            {!many && <div><small>Account</small><strong>{acctName(detail.account_id)}</strong></div>}
             <div><small>Setup</small><strong>{nameOf(setups.rows, detail.setup_id, 'name') || '—'}</strong></div>
-            <div><small>Contracts</small><strong>{detail.contracts ?? '—'}</strong></div>
+            <div><small>Contracts{many ? ' / acct' : ''}</small><strong>{detail.contracts ?? '—'}</strong></div>
             <div><small>R multiple</small><strong>{detail.r_multiple != null ? `${detail.r_multiple}R` : '—'}</strong></div>
             <div><small>Entry</small><strong>{detail.entry_price ?? '—'}</strong></div>
             <div><small>Exit</small><strong>{detail.exit_price ?? '—'}</strong></div>
@@ -194,17 +218,22 @@ export default function Journal() {
             <div><small>Mood</small><strong>{detail.mood || '—'}</strong></div>
           </div>
           {detail.notes && <div className="detail-notes">{detail.notes}</div>}
-          <button className="btn" onClick={() => { setModal({ row: detail }); setDetail(null) }}><Pencil size={14} /> Edit trade</button>
+          <button className="btn" onClick={() => { setModal({ group: detailGroup }); setDetail(null) }}><Pencil size={14} /> Edit {many ? `all ${detailGroup.rows.length} copies` : 'trade'}</button>
         </Drawer>
-      )}
+        )
+      })()}
 
       {modal && (
         <FormModal
-          title={modal.row ? 'Edit trade' : 'Log a trade'}
+          title={modal.group ? (editingGroup ? `Edit copy trade (${modal.group.rows.length} accounts)` : 'Edit trade') : 'Log a trade'}
           fields={fields}
-          initial={modal.row}
-          onSave={(v) => (modal.row ? trades.update(modal.row.id, v) : trades.insert(v))}
-          onDelete={modal.row && (() => trades.remove(modal.row.id))}
+          initial={modal.group?.first}
+          onSave={async (v) => {
+            if (modal.group) await updateTrades(modal.group.rows.map((r) => r.id), v)
+            else await saveNewTrade(v, accounts.rows)
+            await trades.reload()
+          }}
+          onDelete={modal.group && (async () => { await deleteTrades(modal.group.rows.map((r) => r.id)); await trades.reload() })}
           onClose={() => setModal(null)}
         />
       )}

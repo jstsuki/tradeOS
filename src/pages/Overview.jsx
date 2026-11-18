@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase'
 import { useTable } from '../lib/useTable'
 import { useSettings } from '../lib/settings'
 import { money, signedMoney, sum, todayISO, pnlClass, pct } from '../lib/format'
-import { tradeFields } from '../lib/tradeForm'
+import { tradeFields, saveNewTrade, countTrades, groupTrades } from '../lib/tradeForm'
 import { pnlSeries, weekStart, addDays, dailyPnl, accountMetrics, healthClass } from '../lib/metrics'
 import {
   Card, Toolbar, Metric, ProgressRing, Bar, Seg, Toggle, Expander, Donut, Empty, FormModal, Delta, ErrorNote,
@@ -32,6 +32,8 @@ export default function Overview() {
   const [editSettings, setEditSettings] = useState(false)
   const [logTrade, setLogTrade] = useState(false)
   const [prepOpen, setPrepOpen] = useState(false)
+  const [scope, setScope] = useState('all')
+  const [openFirm, setOpenFirm] = useState(null)
   const navigate = useNavigate()
   const setups = useTable('playbook_setups', { ascending: true })
 
@@ -57,19 +59,44 @@ export default function Overview() {
     setValidChecked(next)
   }
 
+  // ---- Scope: all accounts, or one prop firm ----
+  const firmOf = useMemo(() => Object.fromEntries(accounts.rows.map((a) => [a.id, a.firm])), [accounts.rows])
+  const firms = [...new Set(accounts.rows.map((a) => a.firm))].sort()
+  const T = scope === 'all' ? trades.rows : trades.rows.filter((t) => firmOf[t.account_id] === scope)
+  const scopedAccounts = scope === 'all' ? accounts.rows : accounts.rows.filter((a) => a.firm === scope)
+
   // ---- Today & this week (real records only) ----
   const goal = Number(settings?.daily_goal) || 1000
   const maxLoss = Number(settings?.max_daily_loss) || 0
   const maxTrades = Number(settings?.max_trades_per_day) || 0
-  const todays = trades.rows.filter((t) => t.trade_date === today)
+  const todays = T.filter((t) => t.trade_date === today)
+  const tradeCount = countTrades(todays)
   const todayPnl = sum(todays, 'pnl')
   const lossToday = Math.max(-todayPnl, 0)
-  const riskLeft = maxLoss ? Math.max(maxLoss - lossToday, 0) : null
+  // Per-account daily loss limits: the account closest to its limit sets the risk left.
+  const limited = scopedAccounts.filter((a) => a.status === 'Active' && Number(a.daily_loss_limit) > 0)
+  const tightest = limited
+    .map((a) => {
+      const pnl = todays.filter((t) => t.account_id === a.id).reduce((x, t) => x + Number(t.pnl), 0)
+      const limit = Number(a.daily_loss_limit)
+      return { a, limit, left: Math.max(limit - Math.max(-pnl, 0), 0) }
+    })
+    .sort((x, y) => x.left / x.limit - y.left / y.limit)[0]
+  const riskCap = tightest ? tightest.limit : maxLoss
+  const riskLeft = tightest ? tightest.left : maxLoss ? Math.max(maxLoss - lossToday, 0) : null
+  const todayByFirm = useMemo(() => {
+    const m = {}
+    todays.forEach((t) => {
+      const f = firmOf[t.account_id] || 'Personal'
+      m[f] = (m[f] || 0) + Number(t.pnl)
+    })
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
+  }, [todays, firmOf])
 
   const wk = weekStart(today)
   const lastWk = addDays(wk, -7)
-  const weekTrades = trades.rows.filter((t) => t.trade_date >= wk && t.trade_date <= today)
-  const lastWeekTrades = trades.rows.filter((t) => t.trade_date >= lastWk && t.trade_date < wk)
+  const weekTrades = T.filter((t) => t.trade_date >= wk && t.trade_date <= today)
+  const lastWeekTrades = T.filter((t) => t.trade_date >= lastWk && t.trade_date < wk)
   const weekPnl = sum(weekTrades, 'pnl')
   const lastWeekPnl = sum(lastWeekTrades, 'pnl')
   const weekDelta = lastWeekTrades.length && lastWeekPnl !== 0 ? ((weekPnl - lastWeekPnl) / Math.abs(lastWeekPnl)) * 100 : null
@@ -83,32 +110,40 @@ export default function Overview() {
   const prepDone = prepItems.rows.filter((i) => prepChecked.has(i.id)).length
   const validTotal = validItems.rows.length
   const validDone = validItems.rows.filter((i) => validChecked.has(i.id)).length
-  const followed = todays.filter((t) => t.followed_plan).length
+  const todayGroups = groupTrades(todays)
+  const followed = todayGroups.filter((g) => g.first.followed_plan).length
   const lossOk = !maxLoss || todayPnl > -maxLoss
-  const countOk = !maxTrades || todays.length <= maxTrades
+  const countOk = !maxTrades || tradeCount <= maxTrades
   const parts = []
-  if (prepTotal && (prepDone || todays.length)) parts.push(prepDone / prepTotal)
-  if (todays.length) parts.push(followed / todays.length)
+  if (prepTotal && (prepDone || tradeCount)) parts.push(prepDone / prepTotal)
+  if (tradeCount) parts.push(followed / tradeCount)
   if (parts.length) parts.push(lossOk && countOk ? 1 : 0)
   const score = parts.length ? Math.round((parts.reduce((a, b) => a + b, 0) / parts.length) * 100) : null
-  const stopTrading = (maxLoss && todayPnl <= -maxLoss) || (maxTrades && todays.length >= maxTrades)
+  const stopTrading = (maxLoss && todayPnl <= -maxLoss) || (maxTrades && tradeCount >= maxTrades) || (tightest && tightest.left <= 0)
 
   // ---- Chart ----
   const [period, setPeriod] = useState('daily')
   const [showCum, setShowCum] = useState(true)
-  const series = useMemo(() => pnlSeries(trades.rows, period), [trades.rows, period])
+  const series = useMemo(() => pnlSeries(T, period), [T, period])
   const seriesTotal = series.length ? series[series.length - 1].cumulative : 0
 
   // ---- Accounts ----
-  const active = accounts.rows.filter((a) => a.status === 'Active' && (a.kind === 'evaluation' || a.kind === 'funded'))
+  const active = scopedAccounts.filter((a) => a.status === 'Active' && (a.kind === 'evaluation' || a.kind === 'funded'))
+  const firmGroups = useMemo(() => {
+    const m = {}
+    active.forEach((a) => (m[a.firm] = m[a.firm] || []).push(a))
+    return Object.entries(m)
+  }, [active])
   const activeBal = sum(active, 'current_balance')
   const withSize = active.filter((a) => a.current_balance != null && a.account_size)
   const acctProfitKnown = withSize.length > 0
   const acctProfit = withSize.reduce((t, a) => t + Number(a.current_balance) - Number(a.account_size), 0)
 
   // ---- Money ----
-  const received = payouts.rows.filter((p) => p.status === 'Received')
-  const fees = sum(expenses.rows, 'amount')
+  const inScope = (r) => scope === 'all' || r.firm === scope
+  const received = payouts.rows.filter((p) => p.status === 'Received' && inScope(p))
+  const scopedExpenses = expenses.rows.filter(inScope)
+  const fees = sum(scopedExpenses, 'amount')
   const paid = sum(received, 'amount')
   const net = paid - fees
   const brokerage = trades.rows.filter((t) => !t.account_id)
@@ -116,10 +151,10 @@ export default function Overview() {
   const byFirm = useMemo(() => {
     const f = {}
     const g = (n) => (f[n] = f[n] || { firm: n, Fees: 0, Payouts: 0 })
-    expenses.rows.forEach((e) => (g(e.firm).Fees += Number(e.amount) || 0))
+    scopedExpenses.forEach((e) => (g(e.firm).Fees += Number(e.amount) || 0))
     received.forEach((p) => (g(p.firm).Payouts += Number(p.amount) || 0))
     return Object.values(f).sort((a, b) => b.Payouts + b.Fees - (a.Payouts + a.Fees)).slice(0, 5)
-  }, [expenses.rows, received])
+  }, [scopedExpenses, received])
 
   return (
     <div className="page">
@@ -131,7 +166,11 @@ export default function Overview() {
           </>
         }
       >
-        <span className="toolbar-sub">Log each trade as you take it. Your cards, chart and score update instantly.</span>
+        {firms.length > 0 ? (
+          <Seg value={scope} onChange={setScope} options={[['all', 'All accounts'], ...firms.map((f) => [f, f])]} />
+        ) : (
+          <span className="toolbar-sub">Log each trade as you take it. Your cards, chart and score update instantly.</span>
+        )}
       </Toolbar>
       <ErrorNote error={trades.error || accounts.error} />
       {!trades.loading && !accounts.loading && (trades.rows.length === 0 || accounts.rows.length === 0) && (
@@ -161,7 +200,11 @@ export default function Overview() {
           icon={CircleDollarSign}
           value={signedMoney(todayPnl)}
           tone={pnlClass(todayPnl)}
-          sub={todays.length ? <>{pct(Math.max(todayPnl, 0) / goal)} of {money(goal)} goal · {todays.length} trade{todays.length === 1 ? '' : 's'}</> : 'From trades you log today'}
+          sub={todays.length ? (
+            scope === 'all' && todayByFirm.length > 1
+              ? todayByFirm.map(([f, v]) => <span key={f}>{f} <b className={pnlClass(v)}>{signedMoney(v)}</b></span>)
+              : <>{pct(Math.max(todayPnl, 0) / goal)} of {money(goal)} goal · {tradeCount} trade{tradeCount === 1 ? '' : 's'}</>
+          ) : 'Total across accounts, from trades you log'}
           visual={
             <ProgressRing value={todayPnl / goal}>
               <span className="ring-value">{Math.round(Math.max(todayPnl, 0) / goal * 100)}%</span>
@@ -175,7 +218,7 @@ export default function Overview() {
           icon={CalendarRange}
           value={signedMoney(weekPnl)}
           tone={pnlClass(weekPnl)}
-          sub={weekDelta != null ? <><Delta value={weekDelta} suffix="%" /> vs last week</> : `${weekTrades.length} trades this week`}
+          sub={weekDelta != null ? <><Delta value={weekDelta} suffix="%" /> vs last week</> : `${countTrades(weekTrades)} trade${countTrades(weekTrades) === 1 ? "" : "s"} this week`}
           visual={
             <div style={{ width: 84, height: 52 }}>
               <ResponsiveContainer>
@@ -195,11 +238,13 @@ export default function Overview() {
           label="Daily risk left"
           icon={ShieldHalf}
           value={riskLeft == null ? '—' : money(riskLeft)}
-          tone={riskLeft != null && maxLoss && riskLeft / maxLoss < 0.3 ? 'neg' : ''}
-          sub={maxLoss ? <>of {money(maxLoss)} max loss · {todays.length}/{maxTrades || '∞'} trades</> : 'Set a max daily loss'}
+          tone={riskLeft != null && riskCap && riskLeft / riskCap < 0.3 ? 'neg' : ''}
+          sub={tightest
+            ? <>Tightest: {tightest.a.label || tightest.a.firm} · {money(tightest.limit)} limit</>
+            : maxLoss ? <>of {money(maxLoss)} max loss · {tradeCount}/{maxTrades || '∞'} trades</> : 'Set a max daily loss'}
           visual={
-            <ProgressRing value={maxLoss ? riskLeft / maxLoss : 0} colors={riskLeft != null && maxLoss && riskLeft / maxLoss < 0.3 ? ['#F16A9B', '#E2557F'] : ['#A99BFF', '#C58ACB']}>
-              <span className="ring-value">{maxLoss ? Math.round((riskLeft / maxLoss) * 100) : 0}%</span>
+            <ProgressRing value={riskCap ? riskLeft / riskCap : 0} colors={riskLeft != null && riskCap && riskLeft / riskCap < 0.3 ? ['#F16A9B', '#E2557F'] : ['#A99BFF', '#C58ACB']}>
+              <span className="ring-value">{riskCap ? Math.round((riskLeft / riskCap) * 100) : 0}%</span>
             </ProgressRing>
           }
         />
@@ -210,7 +255,7 @@ export default function Overview() {
           icon={Gauge}
           value={score == null ? '—' : score}
           tone={score == null ? '' : score >= 80 ? 'pos' : score < 50 ? 'neg' : ''}
-          sub={score == null ? 'Starts when you prep or trade today' : `Prep ${prepDone}/${prepTotal} · Plan ${todays.length ? `${followed}/${todays.length}` : '—'}`}
+          sub={score == null ? 'Starts when you prep or trade today' : `Prep ${prepDone}/${prepTotal} · Plan ${tradeCount ? `${followed}/${tradeCount}` : '—'}`}
           visual={
             <ProgressRing value={(score || 0) / 100} colors={['#C58ACB', '#A99BFF']}>
               <Gauge size={16} className="muted" />
@@ -288,28 +333,44 @@ export default function Overview() {
             <Empty compact icon={Building2} title="No active accounts" text="Add your prop accounts to track balance, targets and drawdown." action={<div className="row-actions"><Link to="/evaluations" className="btn ghost sm"><Plus size={13} /> Evaluation</Link><Link to="/funded" className="btn ghost sm"><Plus size={13} /> Funded</Link></div>} />
           ) : (
             <div className="acct-list">
-              {active.slice(0, 6).map((a) => {
-                const m = accountMetrics(a)
+              {firmGroups.map(([firm, list]) => {
+                const ms = list.map((a) => ({ a, m: accountMetrics(a) }))
+                const bal = list.reduce((t, a) => t + (Number(a.current_balance) || 0), 0)
+                const prof = ms.filter((x) => x.m.profit != null).reduce((t, x) => t + x.m.profit, 0)
+                const today = todays.filter((t) => list.some((a) => a.id === t.account_id)).reduce((t, x) => t + Number(x.pnl), 0)
+                const tp = ms.filter((x) => x.m.targetProgress != null)
+                const avgTarget = tp.length ? tp.reduce((t, x) => t + x.m.targetProgress, 0) / tp.length : null
+                const dd = ms.filter((x) => x.a.kind === 'funded' && x.m.cushion != null).sort((x, y) => x.m.cushion / x.m.dd - y.m.cushion / y.m.dd)[0]
+                const worst = ms.some((x) => x.m.health === 'At risk') ? 'At risk' : ms.some((x) => x.m.health === 'Caution') ? 'Caution' : ms.some((x) => x.m.health) ? 'Healthy' : null
+                const isOpen = openFirm === firm
                 return (
-                  <Link key={a.id} to={a.kind === 'funded' ? '/funded' : '/evaluations'} className="acct-mini" style={{ textDecoration: 'none', color: 'inherit' }}>
-                    <div className="acct-mini-top">
-                      <span className={`acct-avatar ${a.kind === 'funded' ? '' : 'v'}`}>{a.kind === 'funded' ? <Landmark size={14} /> : <FlaskConical size={14} />}</span>
+                  <div key={firm} className="acct-mini">
+                    <button className="acct-mini-top as-btn" onClick={() => setOpenFirm(isOpen ? null : firm)} aria-expanded={isOpen}>
+                      <span className="acct-avatar">{firm.slice(0, 1)}</span>
                       <div style={{ minWidth: 0 }}>
-                        <strong>{a.firm}</strong>
-                        <small>{a.label || (a.kind === 'funded' ? 'Funded' : 'Evaluation')}</small>
+                        <strong>{firm} <span className="faint">×{list.length}</span></strong>
+                        <small>{prof || prof === 0 ? `${signedMoney(prof)} profit` : ''}{todays.length ? ` · today ${signedMoney(today)}` : ''}</small>
                       </div>
                       <div className="acct-mini-bal">
-                        <strong>{m.bal != null ? money(m.bal) : '—'}</strong>
-                        {m.health && <div><span className={`pill tiny ${healthClass(m.health)}`}>{m.health}</span></div>}
+                        <strong>{money(bal)}</strong>
+                        {worst && <div><span className={`pill tiny ${healthClass(worst)}`}>{worst}</span></div>}
                       </div>
-                    </div>
-                    {m.targetProgress != null && (
-                      <div className="mini-meter"><span>Target</span><Bar thin value={m.targetProgress} /><span>{pct(m.targetProgress)}</span></div>
+                    </button>
+                    {avgTarget != null && <div className="mini-meter"><span>Avg target</span><Bar thin value={avgTarget} /><span>{pct(avgTarget)}</span></div>}
+                    {!dd && ms.some((x) => x.m.dd) && <div className="mini-meter"><span>Max DD</span><span className="faint" style={{ flex: 1 }}>fixed</span><span>{shortMoney(Math.max(...ms.map((x) => x.m.dd)))}</span></div>}
+                    {dd && <div className="mini-meter"><span>DD buffer</span><Bar thin tone={dd.m.health === 'At risk' ? 'danger' : dd.m.health === 'Caution' ? 'warn' : 'violet'} value={1 - dd.m.ddUsed} /><span>{shortMoney(dd.m.cushion)}</span></div>}
+                    {isOpen && (
+                      <div className="firm-accounts">
+                        {ms.map(({ a, m }) => (
+                          <Link key={a.id} to={a.kind === 'funded' ? '/funded' : '/evaluations'} className="firm-acct">
+                            <span>{a.label || (a.kind === 'funded' ? 'Funded' : 'Evaluation')}</span>
+                            <span className={pnlClass(m.profit)}>{m.profit != null ? signedMoney(m.profit) : '—'}</span>
+                            <strong>{m.bal != null ? money(m.bal) : '—'}</strong>
+                          </Link>
+                        ))}
+                      </div>
                     )}
-                    {m.cushion != null && (
-                      <div className="mini-meter"><span>DD buffer</span><Bar thin tone={m.health === 'At risk' ? 'danger' : m.health === 'Caution' ? 'warn' : 'violet'} value={1 - m.ddUsed} /><span>{shortMoney(m.cushion)}</span></div>
-                    )}
-                  </Link>
+                  </div>
                 )
               })}
             </div>
@@ -330,7 +391,7 @@ export default function Overview() {
             <div className="disc-rows">
               <div className="disc-row"><span>Market prep</span><b>{prepDone}/{prepTotal}</b><Bar value={prepTotal ? prepDone / prepTotal : 0} /></div>
               <div className="disc-row"><span>Trade validation</span><b>{validDone}/{validTotal}</b><Bar tone="violet" value={validTotal ? validDone / validTotal : 0} /></div>
-              <div className="disc-row"><span>Followed plan today</span><b>{todays.length ? `${followed}/${todays.length}` : '—'}</b><Bar tone="ok" value={todays.length ? followed / todays.length : 0} /></div>
+              <div className="disc-row"><span>Followed plan today</span><b>{tradeCount ? `${followed}/${tradeCount}` : '—'}</b><Bar tone="ok" value={tradeCount ? followed / tradeCount : 0} /></div>
             </div>
           </div>
           <div className="rule-chips">
@@ -410,7 +471,7 @@ export default function Overview() {
         <FormModal
           title="Log a trade"
           fields={tradeFields(accounts.rows, setups.rows)}
-          onSave={(v) => trades.insert(v)}
+          onSave={async (v) => { await saveNewTrade(v, accounts.rows); await trades.reload() }}
           onClose={() => setLogTrade(false)}
         />
       )}

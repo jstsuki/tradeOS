@@ -56,17 +56,22 @@ export function pnlSeries(trades, period) {
 const round = (n) => Math.round(n * 100) / 100
 
 // Account health from balance, size and max drawdown (static approximation).
+export const FUNDED_BUFFER = { 25000: 1000, 50000: 2000 }
+
 export function accountMetrics(a, trades = []) {
   const size = Number(a.account_size) || 0
   const bal = a.current_balance == null ? null : Number(a.current_balance)
   const profit = bal != null && size ? bal - size : null
   const target = Number(a.profit_target) || 0
-  const dd = Number(a.max_drawdown) || 0
-  const cushion = bal != null && size && dd ? Math.max(bal - (size - dd), 0) : null
+  const funded = a.kind === 'funded'
+  // Funded accounts start with a $1,000 buffer on 25K and $2,000 on 50K unless set otherwise.
+  const dd = Number(a.max_drawdown) || (funded ? FUNDED_BUFFER[size] || 0 : 0)
+  // Evaluations: the drawdown is a fixed limit that stays at its full amount. Only funded accounts have a live buffer.
+  const cushion = !funded ? (dd || null) : bal != null && size && dd ? Math.max(bal - (size - dd), 0) : null
   const ddUsed = cushion != null ? Math.min(Math.max(1 - cushion / dd, 0), 1) : null
   const targetProgress = target && profit != null ? Math.max(profit, 0) / target : null
   const ratio = cushion != null ? cushion / dd : null
-  const health = ratio == null ? null : ratio >= 0.6 ? 'Healthy' : ratio >= 0.3 ? 'Caution' : 'At risk'
+  const health = !funded || ratio == null ? null : ratio >= 0.6 ? 'Healthy' : ratio >= 0.3 ? 'Caution' : 'At risk'
   const tradingDays = new Set(trades.map((t) => t.trade_date)).size
   const journalPnl = trades.reduce((s, t) => s + (Number(t.pnl) || 0), 0)
   const wins = trades.filter((t) => Number(t.pnl) > 0).length
