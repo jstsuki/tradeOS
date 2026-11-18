@@ -17,7 +17,7 @@ A private, all-in-one personal trading dashboard with a Japanese "Matcha Garden"
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_PUBLISHABLE_KEY`
 3. **Login link:** in Supabase → Authentication → URL Configuration, set **Site URL** to your Vercel address.
-4. Open the app, click **Create your account**, confirm the email, then log in.
+4. Create your user in Supabase → Authentication → Users → **Add user** (the app itself only has a log-in screen).
 5. **Lock the door:** in Supabase → Authentication → Sign In / Providers, turn **off** "Allow new users to sign up".
 
 ## Running on a computer (optional, for developers)
