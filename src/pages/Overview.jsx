@@ -102,6 +102,9 @@ export default function Overview() {
   // ---- Accounts ----
   const active = accounts.rows.filter((a) => a.status === 'Active' && (a.kind === 'evaluation' || a.kind === 'funded'))
   const activeBal = sum(active, 'current_balance')
+  const withSize = active.filter((a) => a.current_balance != null && a.account_size)
+  const acctProfitKnown = withSize.length > 0
+  const acctProfit = withSize.reduce((t, a) => t + Number(a.current_balance) - Number(a.account_size), 0)
 
   // ---- Money ----
   const received = payouts.rows.filter((p) => p.status === 'Received')
@@ -158,7 +161,7 @@ export default function Overview() {
           icon={CircleDollarSign}
           value={signedMoney(todayPnl)}
           tone={pnlClass(todayPnl)}
-          sub={<>{pct(Math.max(todayPnl, 0) / goal)} of {money(goal)} goal · {todays.length} trade{todays.length === 1 ? '' : 's'}</>}
+          sub={todays.length ? <>{pct(Math.max(todayPnl, 0) / goal)} of {money(goal)} goal · {todays.length} trade{todays.length === 1 ? '' : 's'}</> : 'From trades you log today'}
           visual={
             <ProgressRing value={todayPnl / goal}>
               <span className="ring-value">{Math.round(Math.max(todayPnl, 0) / goal * 100)}%</span>
@@ -236,7 +239,7 @@ export default function Overview() {
             <Empty
               icon={ChartSpline}
               title="No trades in this range yet"
-              text="Log real trades in your journal and your P&L curve will draw itself here."
+              text="This chart uses the trades you log, not account balances. Log each trade and the curve draws itself."
               action={<button className="btn sm" onClick={() => setLogTrade(true)}><Plus size={14} /> Log your first trade</button>}
             />
           ) : (
@@ -276,7 +279,7 @@ export default function Overview() {
           </div>
           <div className="balance-value">{active.length ? money(activeBal, { cents: true }) : '—'}</div>
           <div className="balance-foot">
-            <span>{active.filter((a) => a.kind === 'evaluation').length} evaluations · {active.filter((a) => a.kind === 'funded').length} funded</span>
+            <span>{active.filter((a) => a.kind === 'evaluation').length} evaluations · {active.filter((a) => a.kind === 'funded').length} funded{acctProfitKnown ? ` · ${signedMoney(acctProfit)} profit` : ''}</span>
             <span>{paid ? `${money(paid)} paid out` : ''}</span>
           </div>
         </div>

@@ -13,10 +13,26 @@ const STATUS = {
   funded: ['Active', 'Payout pending', 'Breached', 'Closed'],
 }
 
+// Evaluation presets: picking a size fills in its profit target and max drawdown.
+const EVAL_SIZES = {
+  25000: { profit_target: 1250, max_drawdown: 1000 },
+  50000: { profit_target: 3000, max_drawdown: 2000 },
+}
+const EVAL_NICKNAMES = [1, 2, 3, 4, 5].map((n) => `LucidMaxx 50K #${n}`)
+
 const accountFields = (kind) => [
   { name: 'firm', label: 'Prop firm', type: 'select', options: PROP_FIRMS, required: true, default: PROP_FIRMS[0] },
-  { name: 'label', label: 'Nickname / account #', placeholder: 'e.g. 50K #2' },
-  { name: 'account_size', label: 'Account size ($)', type: 'number' },
+  kind === 'evaluation'
+    ? { name: 'label', label: 'Nickname / account #', type: 'select', options: EVAL_NICKNAMES }
+    : { name: 'label', label: 'Nickname / account #', placeholder: 'e.g. 50K #2' },
+  kind === 'evaluation'
+    ? {
+        name: 'account_size', label: 'Account size ($)', type: 'select', numeric: true,
+        options: Object.keys(EVAL_SIZES).map((v) => [Number(v), '$' + Number(v).toLocaleString('en-US')]),
+        hint: 'Fills in the profit target and max drawdown',
+        onPick: (v) => EVAL_SIZES[Number(v)] || {},
+      }
+    : { name: 'account_size', label: 'Account size ($)', type: 'number' },
   { name: 'current_balance', label: 'Current balance ($)', type: 'number' },
   kind === 'evaluation'
     ? { name: 'profit_target', label: 'Profit target ($)', type: 'number' }
@@ -26,7 +42,7 @@ const accountFields = (kind) => [
   { name: 'drawdown_type', label: 'Drawdown type', type: 'select', options: ['Trailing (EOD)', 'Trailing (intraday)', 'Static'] },
   { name: 'status', label: 'Status', type: 'select', options: STATUS[kind], required: true, default: 'Active' },
   { name: 'start_date', label: 'Start date', type: 'date', default: todayISO() },
-  { name: 'notes', label: 'Notes', type: 'textarea' },
+  ...(kind === 'evaluation' ? [] : [{ name: 'notes', label: 'Notes', type: 'textarea' }]),
 ]
 
 const payoutFields = [

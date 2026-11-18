@@ -277,7 +277,12 @@ export function FormModal({ title, fields, initial = {}, onSave, onClose, onDele
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const set = (name, val) => setValues((s) => ({ ...s, [name]: val }))
+  // A field can auto-fill others when it changes: onPick(value) returns { otherField: value, ... }
+  const set = (name, val) => {
+    const f = fields.find((x) => x.name === name)
+    const extra = f?.onPick ? f.onPick(val) || {} : {}
+    setValues((s) => ({ ...s, ...extra, [name]: val }))
+  }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -286,7 +291,7 @@ export function FormModal({ title, fields, initial = {}, onSave, onClose, onDele
     const clean = {}
     for (const f of fields) {
       let v = values[f.name]
-      if (f.type === 'number') v = v === '' || v === null ? null : Number(v)
+      if (f.type === 'number' || f.numeric) v = v === '' || v === null ? null : Number(v)
       else if (f.type !== 'checkbox' && v === '') v = null
       clean[f.name] = v
     }
