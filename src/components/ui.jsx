@@ -272,6 +272,11 @@ export function FormModal({ title, fields, initial = {}, onSave, onClose, onDele
       const iv = initial?.[f.name]
       v[f.name] = f.type === 'checkbox' ? (iv ?? f.default ?? false) : iv ?? f.default ?? ''
     }
+    // Fill blanks from any preset that is already chosen (e.g. editing a 25K account with no target yet).
+    for (const f of fields) {
+      if (!f.onPick || v[f.name] === '' || v[f.name] == null) continue
+      for (const [k, x] of Object.entries(f.onPick(v[f.name]) || {})) if (v[k] === '' || v[k] == null) v[k] = x
+    }
     return v
   })
   const [busy, setBusy] = useState(false)
@@ -318,7 +323,7 @@ export function FormModal({ title, fields, initial = {}, onSave, onClose, onDele
             {f.type === 'select' ? (
               <select value={values[f.name] ?? ''} onChange={(e) => set(f.name, e.target.value)} required={f.required}>
                 {!f.required && <option value="">—</option>}
-                {(values[f.name] && !f.options.some((o) => (Array.isArray(o) ? o[0] : o) === values[f.name]) ? [values[f.name], ...f.options] : f.options).map((o) => {
+                {(values[f.name] && !f.options.some((o) => String(Array.isArray(o) ? o[0] : o) === String(values[f.name])) ? [values[f.name], ...f.options] : f.options).map((o) => {
                   const [val, lab] = Array.isArray(o) ? o : [o, o]
                   return (
                     <option key={val} value={val}>
