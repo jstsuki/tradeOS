@@ -62,7 +62,7 @@ export default function Playbook() {
                     <strong>{s.name}</strong>
                     <small>{[s.market, s.timeframe].filter(Boolean).join(' · ') || 'Any market'}</small>
                   </div>
-                  <button className="icon-btn sm" onClick={() => setModal({ row: s })} aria-label="Edit setup"><Pencil size={14} /></button>
+                  <button className="btn ghost sm" onClick={() => setModal({ row: s })}><Pencil size={13} /> Edit</button>
                 </div>
 
                 <div className="setup-stats">
@@ -88,7 +88,7 @@ export default function Playbook() {
                     <Rule icon={LogIn} title="Entry" items={lines(s.entry_rules)} />
                     <Rule icon={LogOut} title="Exit" items={lines(s.exit_rules)} />
                     <Rule icon={OctagonAlert} title="Do not take it when" items={warns} tone="warn" />
-                    {!s.entry_rules && !s.exit_rules && !warns.length && <p className="faint small" style={{ margin: 0 }}>No rules written yet. Click the pencil to add them.</p>}
+                    {!s.entry_rules && !s.exit_rules && !warns.length && <p className="faint small" style={{ margin: 0 }}>No rules written yet. Click Edit to add them.</p>}
                   </div>
                 )}
               </Card>

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { Sprout, Percent, Scale, TrendingUp, TrendingDown, HeartHandshake, ChartSpline, CalendarRange, BookOpenText, Smile } from 'lucide-react'
 import {
@@ -107,7 +108,7 @@ export default function Analytics() {
       {trades.loading ? (
         <Loading />
       ) : rows.length === 0 ? (
-        <Card><Empty icon={ChartSpline} title="No trades in this range" text="Analytics appear once you log real trades in your journal." /></Card>
+        <Card><Empty icon={ChartSpline} title="No trades in this range" text="Analytics appear once you log real trades in your journal." action={<Link to="/journal" className="btn sm">Go to journal</Link>} /></Card>
       ) : (
         <>
           <div className="stats-row">

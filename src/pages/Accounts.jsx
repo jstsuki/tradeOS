@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import {
-  Plus, Pencil, FlaskConical, Landmark, Flag, ShieldHalf, HandCoins, CircleCheck, CircleX, Layers, CalendarDays, HeartPulse, Target,
+  Plus, Pencil, FlaskConical, Landmark, Flag, ShieldHalf, HandCoins, CircleCheck, CircleX, Layers, CalendarDays, HeartPulse, Target, RefreshCw,
 } from 'lucide-react'
 import { useTable } from '../lib/useTable'
+import { PROP_FIRMS } from '../lib/firms'
 import { money, signedMoney, sum, niceDate, pnlClass, pct, todayISO } from '../lib/format'
 import { accountMetrics, healthClass } from '../lib/metrics'
 import { Card, Toolbar, Stat, Bar, Empty, FormModal, Loading, ErrorNote, ProgressRing } from '../components/ui'
@@ -13,7 +14,7 @@ const STATUS = {
 }
 
 const accountFields = (kind) => [
-  { name: 'firm', label: 'Prop firm', required: true, placeholder: 'e.g. Topstep' },
+  { name: 'firm', label: 'Prop firm', type: 'select', options: PROP_FIRMS, required: true, default: PROP_FIRMS[0] },
   { name: 'label', label: 'Nickname / account #', placeholder: 'e.g. 50K #2' },
   { name: 'account_size', label: 'Account size ($)', type: 'number' },
   { name: 'current_balance', label: 'Current balance ($)', type: 'number' },
@@ -109,6 +110,7 @@ export default function Accounts({ kind }) {
               trades={trades.rows.filter((t) => t.account_id === a.id)}
               payouts={payouts.rows.filter((p) => p.account_id === a.id)}
               onEdit={() => setModal({ type: 'account', row: a })}
+              onQuick={() => setModal({ type: 'quick', row: a })}
               onPayout={(row) => setModal({ type: 'payout', account: a, row })}
             />
           ))}
@@ -122,6 +124,18 @@ export default function Accounts({ kind }) {
           initial={modal.row}
           onSave={(v) => (modal.row ? accounts.update(modal.row.id, v) : accounts.insert(v))}
           onDelete={modal.row && (() => accounts.remove(modal.row.id))}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'quick' && (
+        <FormModal
+          title={`Update ${modal.row.firm}${modal.row.label ? ` · ${modal.row.label}` : ''}`}
+          fields={[
+            { name: 'current_balance', label: 'Current balance ($)', type: 'number', required: true, full: true, hint: 'Copy it from your prop firm dashboard at the end of the day' },
+            { name: 'status', label: 'Status', type: 'select', options: STATUS[kind], required: true, full: true },
+          ]}
+          initial={modal.row}
+          onSave={(v) => accounts.update(modal.row.id, v)}
           onClose={() => setModal(null)}
         />
       )}
@@ -139,7 +153,7 @@ export default function Accounts({ kind }) {
   )
 }
 
-function AccountCard({ a, isEval, trades, payouts, onEdit, onPayout }) {
+function AccountCard({ a, isEval, trades, payouts, onEdit, onPayout, onQuick }) {
   const m = accountMetrics(a, trades)
   const statusClass = a.status.toLowerCase().replace(/\s+/g, '-')
   const paid = sum(payouts.filter((p) => p.status === 'Received'), 'amount')
@@ -154,7 +168,6 @@ function AccountCard({ a, isEval, trades, payouts, onEdit, onPayout }) {
           <small>{[a.label, m.size ? money(m.size) : null, a.drawdown_type].filter(Boolean).join(' · ') || '—'}</small>
         </div>
         <span className={`pill ${statusClass}`}>{a.status}</span>
-        <button className="icon-btn sm" onClick={onEdit} aria-label="Edit account"><Pencil size={14} /></button>
       </div>
 
       <div className="acct-balance">
@@ -205,7 +218,6 @@ function AccountCard({ a, isEval, trades, payouts, onEdit, onPayout }) {
         <div className="payouts">
           <div className="meter-label">
             <span><HandCoins size={12} /> Payouts received <b>{money(paid)}</b></span>
-            <button className="link-btn" onClick={() => onPayout(null)}><Plus size={12} /> Add</button>
           </div>
           {payouts.slice(0, 3).map((p) => (
             <button key={p.id} className="payout-row" onClick={() => onPayout(p)}>
@@ -216,6 +228,11 @@ function AccountCard({ a, isEval, trades, payouts, onEdit, onPayout }) {
           ))}
         </div>
       )}
+      <div className="card-actions">
+        <button className="btn sm" onClick={onQuick}><RefreshCw size={13} /> Update balance</button>
+        {!isEval && <button className="btn ghost sm" onClick={() => onPayout(null)}><HandCoins size={13} /> Add payout</button>}
+        <button className="btn ghost sm" onClick={onEdit}><Pencil size={13} /> Edit</button>
+      </div>
       {a.start_date && <div className="field-hint"><CalendarDays size={11} style={{ verticalAlign: '-1px' }} /> Started {niceDate(a.start_date)}</div>}
     </Card>
   )

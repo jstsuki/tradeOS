@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Receipt, HandCoins, TrendingUp, Percent, Building2, ChartColumn, PieChart as PieIcon, Table2, Search } from 'lucide-react'
+import { Pencil, Receipt, HandCoins, TrendingUp, Percent, Building2, ChartColumn, PieChart as PieIcon, Table2, Search } from 'lucide-react'
 import {
   BarChart, Bar as RBar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from 'recharts'
 import { useTable } from '../lib/useTable'
+import { PROP_FIRMS } from '../lib/firms'
 import { money, signedMoney, sum, niceDate, pnlClass, pct, todayISO } from '../lib/format'
 import { Card, Toolbar, Stat, Empty, FormModal, ErrorNote, Donut, Seg } from '../components/ui'
 import { C, PALETTE, chartTooltip, axis, shortMoney } from './chartTheme'
@@ -79,7 +80,7 @@ export default function Finances() {
   const firms = [...new Set([...expenses.rows, ...payouts.rows].map((r) => r.firm))].sort()
 
   const expenseFields = [
-    { name: 'firm', label: 'Prop firm', placeholder: 'Blank = use the account’s firm' },
+    { name: 'firm', label: 'Prop firm', type: 'select', options: PROP_FIRMS, hint: 'Blank = use the account’s firm' },
     { name: 'account_id', label: 'Account (optional)', type: 'select', options: acctOptions },
     { name: 'category', label: 'Category', type: 'select', options: CATEGORIES, required: true, default: 'Evaluation fee' },
     { name: 'amount', label: 'Amount ($)', type: 'number', required: true },
@@ -87,7 +88,7 @@ export default function Finances() {
     { name: 'notes', label: 'Notes', type: 'textarea' },
   ]
   const payoutFields = [
-    { name: 'firm', label: 'Prop firm', placeholder: 'Blank = use the account’s firm' },
+    { name: 'firm', label: 'Prop firm', type: 'select', options: PROP_FIRMS, hint: 'Blank = use the account’s firm' },
     { name: 'account_id', label: 'Account (optional)', type: 'select', options: acctOptions },
     { name: 'amount', label: 'Amount ($)', type: 'number', required: true },
     { name: 'payout_date', label: 'Date', type: 'date', required: true, default: todayISO() },
@@ -118,7 +119,7 @@ export default function Finances() {
 
       {empty ? (
         <Card>
-          <Empty icon={Receipt} title="No fees or payouts yet" text="Add your evaluation fees, resets and payouts. Charts and comparisons build themselves from them." />
+          <Empty icon={Receipt} title="No fees or payouts yet" text="Add what you pay prop firms (evaluation fees, resets, data) and what they pay you. The charts build themselves." action={<div className="row-actions"><button className="btn ghost sm" onClick={() => setModal({ type: 'expense' })}><Receipt size={13} /> Add fee</button><button className="btn sm" onClick={() => setModal({ type: 'payout' })}><HandCoins size={13} /> Add payout</button></div>} />
         </Card>
       ) : (
         <>
@@ -190,7 +191,7 @@ export default function Finances() {
             </Card>
           </div>
 
-          <Card title="Transactions" icon={Table2}>
+          <Card title="Transactions" icon={Table2} action={<span className="faint small">Click a row to edit</span>}>
             <Toolbar>
               <Seg value={type} onChange={setType} options={[['all', 'All'], ['expense', 'Fees'], ['payout', 'Payouts']]} />
               <select className="mini-select" value={firm} onChange={(e) => setFirm(e.target.value)} aria-label="Filter by firm">
@@ -207,7 +208,7 @@ export default function Finances() {
             ) : (
               <div className="table-wrap">
                 <table className="table">
-                  <thead><tr><th>Date</th><th>Firm</th><th>Type</th><th className="num">Amount</th></tr></thead>
+                  <thead><tr><th>Date</th><th>Firm</th><th>Type</th><th className="num">Amount</th><th className="num"></th></tr></thead>
                   <tbody>
                     {txns.map((r) => (
                       <tr key={r._type + r.id} className="click" onClick={() => setModal({ type: r._type, row: r })}>
@@ -220,6 +221,7 @@ export default function Finances() {
                         <td className={`num ${r._type === 'payout' ? (r.status === 'Received' ? 'pos' : 'muted') : 'neg'}`}>
                           {r._amt >= 0 ? '+' : '−'}{money(Math.abs(r._amt), { cents: true })}
                         </td>
+                        <td className="num"><Pencil size={13} className="faint" /></td>
                       </tr>
                     ))}
                   </tbody>

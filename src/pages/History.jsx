@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { History as HistoryIcon, ChevronDown, ListChecks, ArrowUpRight, ArrowDownRight, Target, Check, CircleAlert } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -61,7 +62,7 @@ export default function History() {
       {loading ? (
         <Loading />
       ) : days.length === 0 ? (
-        <Card><Empty icon={HistoryIcon} title="No history yet" text="Tick your market prep or log a trade, and each day is kept here." /></Card>
+        <Card><Empty icon={HistoryIcon} title="No history yet" text="Tick your market prep or log a trade, and each day is kept here." action={<Link to="/journal" className="btn sm">Go to journal</Link>} /></Card>
       ) : (
         <div className="history">
           {days.map((d) => {

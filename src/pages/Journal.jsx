@@ -7,10 +7,10 @@ import { BarChart, Bar as RBar, Cell, AreaChart, Area, XAxis, YAxis, Tooltip, Re
 import { useTable } from '../lib/useTable'
 import { signedMoney, money, sum, niceDate, pnlClass, todayISO, pct } from '../lib/format'
 import { addDays, parseISO } from '../lib/metrics'
+import { tradeFields } from '../lib/tradeForm'
 import { Card, Toolbar, Stat, Empty, FormModal, Loading, ErrorNote, Donut, Drawer } from '../components/ui'
 import { C, chartTooltip, axis, shortMoney } from './chartTheme'
 
-const MOODS = ['😌 Calm', '🎯 Focused', '😊 Confident', '😬 Anxious', '😤 Frustrated', '🤑 Greedy', '😴 Tired', '😨 Fearful']
 
 export default function Journal() {
   const trades = useTable('trades', { order: 'trade_date' })
@@ -21,21 +21,7 @@ export default function Journal() {
   const [acct, setAcct] = useState('')
   const [day, setDay] = useState(null)
 
-  const fields = [
-    { name: 'trade_date', label: 'Date', type: 'date', required: true, default: day || todayISO() },
-    { name: 'symbol', label: 'Symbol', required: true, placeholder: 'e.g. NQ' },
-    { name: 'direction', label: 'Direction', type: 'select', options: ['Long', 'Short'], required: true, default: 'Long' },
-    { name: 'pnl', label: 'P&L ($, after fees)', type: 'number', required: true },
-    { name: 'account_id', label: 'Account', type: 'select', options: accounts.rows.map((a) => [a.id, `${a.firm}${a.label ? ` · ${a.label}` : ''}`]), hint: 'Leave blank for brokerage / personal trades' },
-    { name: 'setup_id', label: 'Playbook setup', type: 'select', options: setups.rows.map((s) => [s.id, s.name]) },
-    { name: 'contracts', label: 'Contracts / size', type: 'number' },
-    { name: 'r_multiple', label: 'R multiple', type: 'number', placeholder: 'e.g. 2 or -1' },
-    { name: 'entry_price', label: 'Entry price', type: 'number' },
-    { name: 'exit_price', label: 'Exit price', type: 'number' },
-    { name: 'mood', label: 'How I felt', type: 'select', options: MOODS },
-    { name: 'followed_plan', label: 'I followed my plan', type: 'checkbox', default: true },
-    { name: 'notes', label: 'Notes & lessons', type: 'textarea' },
-  ]
+  const fields = tradeFields(accounts.rows, setups.rows, day)
 
   const filtered = trades.rows.filter((t) => !acct || t.account_id === acct)
   const shown = day ? filtered.filter((t) => t.trade_date === day) : filtered
@@ -156,11 +142,11 @@ export default function Journal() {
           )}
         </Card>
 
-        <Card title={day ? niceDate(day) : 'Trades'} icon={NotebookPen} action={<span className="faint small">{shown.length}</span>}>
+        <Card title={day ? niceDate(day) : 'Trades'} icon={NotebookPen} action={<span className="faint small">{shown.length ? 'Click a trade for details' : ''}</span>}>
           {trades.loading ? (
             <Loading />
           ) : shown.length === 0 ? (
-            <Empty compact icon={NotebookPen} title={trades.rows.length ? 'No trades here' : 'Your journal is empty'} text={trades.rows.length ? null : 'Log your first real trade to start your history.'} />
+            <Empty compact icon={NotebookPen} title={trades.rows.length ? 'No trades here' : 'Your journal is empty'} text={trades.rows.length ? null : 'Log your first real trade to start your history.'} action={!trades.rows.length && <button className="btn sm" onClick={() => setModal({})}><Plus size={14} /> Log trade</button>} />
           ) : (
             <div className="trade-list">
               {shown.map((t) => (

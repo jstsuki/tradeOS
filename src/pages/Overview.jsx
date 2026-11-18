@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   CircleDollarSign, CalendarRange, ShieldHalf, Gauge, ChartSpline, Wallet, Building2, ListChecks, BadgeCheck,
-  Calculator, StickyNote, Plus, X, Pencil, RotateCcw, OctagonAlert, Check, Minus, ArrowRight, FlaskConical, Landmark,
+  Calculator, StickyNote, Plus, SlidersHorizontal, X, Pencil, RotateCcw, OctagonAlert, Check, Minus, ArrowRight, FlaskConical, Landmark,
 } from 'lucide-react'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, BarChart, Bar as RBar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, ReferenceLine,
@@ -11,9 +11,10 @@ import { supabase } from '../lib/supabase'
 import { useTable } from '../lib/useTable'
 import { useSettings } from '../lib/settings'
 import { money, signedMoney, sum, todayISO, pnlClass, pct } from '../lib/format'
+import { tradeFields } from '../lib/tradeForm'
 import { pnlSeries, weekStart, addDays, dailyPnl, accountMetrics, healthClass } from '../lib/metrics'
 import {
-  Card, Metric, ProgressRing, Bar, Seg, Toggle, Expander, Donut, Empty, FormModal, Delta, ErrorNote,
+  Card, Toolbar, Metric, ProgressRing, Bar, Seg, Toggle, Expander, Donut, Empty, FormModal, Delta, ErrorNote,
 } from '../components/ui'
 import { C, chartTooltip, axis, shortMoney } from './chartTheme'
 
@@ -29,6 +30,10 @@ export default function Overview() {
   const [prepChecked, setPrepChecked] = useState(() => new Set())
   const [validChecked, setValidChecked] = useState(() => new Set())
   const [editSettings, setEditSettings] = useState(false)
+  const [logTrade, setLogTrade] = useState(false)
+  const [prepOpen, setPrepOpen] = useState(false)
+  const navigate = useNavigate()
+  const setups = useTable('playbook_setups', { ascending: true })
 
   useEffect(() => {
     supabase
@@ -115,12 +120,40 @@ export default function Overview() {
 
   return (
     <div className="page">
+      <Toolbar
+        actions={
+          <>
+            <button className="btn ghost" onClick={() => setEditSettings(true)}><SlidersHorizontal size={15} /> Goals & limits</button>
+            <button className="btn" onClick={() => setLogTrade(true)}><Plus size={15} /> Log trade</button>
+          </>
+        }
+      >
+        <span className="toolbar-sub">Log each trade as you take it. Your cards, chart and score update instantly.</span>
+      </Toolbar>
       <ErrorNote error={trades.error || accounts.error} />
+      {!trades.loading && !accounts.loading && (trades.rows.length === 0 || accounts.rows.length === 0) && (
+        <div className="quickstart">
+          <Link to="/evaluations" className={`qs-step ${accounts.rows.length ? 'done' : ''}`}>
+            <span className="qs-num">{accounts.rows.length ? <Check size={14} /> : 1}</span>
+            <div><strong>Add your accounts</strong><small>Evaluations & funded, with balance and rules</small></div>
+          </Link>
+          <button className={`qs-step ${prepDone ? 'done' : ''}`} onClick={() => { document.getElementById('discipline')?.scrollIntoView({ behavior: 'smooth' }); setPrepOpen(true) }}>
+            <span className="qs-num">{prepDone ? <Check size={14} /> : 2}</span>
+            <div><strong>Tick your market prep</strong><small>Each morning, before the open</small></div>
+          </button>
+          <button className={`qs-step ${trades.rows.length ? 'done' : ''}`} onClick={() => setLogTrade(true)}>
+            <span className="qs-num">{trades.rows.length ? <Check size={14} /> : 3}</span>
+            <div><strong>Log each trade</strong><small>Cards, charts and score fill in</small></div>
+          </button>
+        </div>
+      )}
 
       {/* ---- Metric cards ---- */}
       <div className="metrics">
         <Metric
           selected
+          onClick={() => setLogTrade(true)}
+          hint="+ Log trade"
           label="Daily P&L"
           icon={CircleDollarSign}
           value={signedMoney(todayPnl)}
@@ -133,6 +166,8 @@ export default function Overview() {
           }
         />
         <Metric
+          onClick={() => navigate('/journal')}
+          hint="View journal"
           label="Weekly P&L"
           icon={CalendarRange}
           value={signedMoney(weekPnl)}
@@ -152,6 +187,8 @@ export default function Overview() {
           }
         />
         <Metric
+          onClick={() => setEditSettings(true)}
+          hint="Edit limits"
           label="Daily risk left"
           icon={ShieldHalf}
           value={riskLeft == null ? '—' : money(riskLeft)}
@@ -164,6 +201,8 @@ export default function Overview() {
           }
         />
         <Metric
+          onClick={() => { const el = document.getElementById('discipline'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setPrepOpen(true) }}
+          hint="Open checklist"
           label="Discipline score"
           icon={Gauge}
           value={score == null ? '—' : score}
@@ -198,7 +237,7 @@ export default function Overview() {
               icon={ChartSpline}
               title="No trades in this range yet"
               text="Log real trades in your journal and your P&L curve will draw itself here."
-              action={<Link to="/journal" className="btn sm">Open journal <ArrowRight size={14} /></Link>}
+              action={<button className="btn sm" onClick={() => setLogTrade(true)}><Plus size={14} /> Log your first trade</button>}
             />
           ) : (
             <>
@@ -241,9 +280,9 @@ export default function Overview() {
             <span>{paid ? `${money(paid)} paid out` : ''}</span>
           </div>
         </div>
-        <Card title="Account health" icon={Building2}>
+        <Card title="Account health" icon={Building2} action={active.length ? <Link to="/evaluations" className="link-btn">Manage <ArrowRight size={13} /></Link> : null}>
           {active.length === 0 ? (
-            <Empty compact icon={Building2} title="No active accounts" text="Add evaluation or funded accounts to see their health here." />
+            <Empty compact icon={Building2} title="No active accounts" text="Add your prop accounts to track balance, targets and drawdown." action={<div className="row-actions"><Link to="/evaluations" className="btn ghost sm"><Plus size={13} /> Evaluation</Link><Link to="/funded" className="btn ghost sm"><Plus size={13} /> Funded</Link></div>} />
           ) : (
             <div className="acct-list">
               {active.slice(0, 6).map((a) => {
@@ -278,7 +317,7 @@ export default function Overview() {
 
       {/* ---- Discipline + money ---- */}
       <div className="grid three">
-        <Card title="Trading discipline" icon={Gauge} action={<button className="icon-btn" onClick={() => setEditSettings(true)} aria-label="Edit goals and limits"><Pencil size={15} /></button>}>
+        <Card id="discipline" title="Trading discipline" icon={Gauge} action={<button className="btn ghost sm" onClick={() => setEditSettings(true)}><Pencil size={13} /> Limits</button>}>
           {stopTrading ? <div className="stop-banner"><OctagonAlert size={16} /> Limit reached. Step away for today.</div> : null}
           <div className="disc-top">
             <ProgressRing value={(score || 0) / 100} size={96} stroke={9}>
@@ -297,7 +336,7 @@ export default function Overview() {
             <RuleChip ok={prepTotal > 0 && prepDone === prepTotal} na={!prepTotal} label="Prep done" />
             <RuleChip ok={validTotal > 0 && validDone === validTotal} na={!validTotal || validDone === 0} label={validDone === validTotal && validTotal ? 'Valid setup' : 'Validation'} />
           </div>
-          <Expander title="Market prep" icon={ListChecks} meta={`${prepDone}/${prepTotal}`}>
+          <Expander title="Market prep" icon={ListChecks} meta={`${prepDone}/${prepTotal}`} open={prepOpen} onToggle={setPrepOpen}>
             <ChecklistEditor table={prepItems} checked={prepChecked} onToggle={togglePrep} />
           </Expander>
           <Expander title="Trade validation" icon={BadgeCheck} meta={validDone === validTotal && validTotal ? 'Valid' : `${validTotal - validDone} left`}>
@@ -316,7 +355,7 @@ export default function Overview() {
 
         <Card title="Prop firm financials" icon={Wallet} action={<Link to="/finances" className="link-btn">Details <ArrowRight size={13} /></Link>}>
           {fees === 0 && paid === 0 ? (
-            <Empty compact icon={Wallet} title="No fees or payouts yet" text="Add evaluation fees and payouts on the Finances page." />
+            <Empty compact icon={Wallet} title="No fees or payouts yet" text="Record what you pay prop firms and what they pay you." action={<Link to="/finances" className="btn ghost sm"><Plus size={13} /> Add fee or payout</Link>} />
           ) : (
             <div className="donut-wrap">
               <Donut
@@ -364,6 +403,14 @@ export default function Overview() {
         </Card>
       </div>
 
+      {logTrade && (
+        <FormModal
+          title="Log a trade"
+          fields={tradeFields(accounts.rows, setups.rows)}
+          onSave={(v) => trades.insert(v)}
+          onClose={() => setLogTrade(false)}
+        />
+      )}
       {editSettings && (
         <FormModal
           title="Goals & limits"

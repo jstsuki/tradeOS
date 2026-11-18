@@ -1,11 +1,15 @@
 import { useEffect, useId, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Trash2, ChevronDown, Sparkles } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { chartTooltip } from '../pages/chartTheme'
 
-export function Card({ title, icon: Icon, action, className = '', children, onClick }) {
+export function Card({ title, icon: Icon, action, className = '', children, onClick, hint, id }) {
+  const clickProps = onClick
+    ? { onClick, role: 'button', tabIndex: 0, 'aria-label': hint || title, onKeyDown: (e) => (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget && (e.preventDefault(), onClick(e)) }
+    : {}
   return (
-    <section className={`card ${className}`} onClick={onClick}>
+    <section id={id} className={`card ${className}`} {...clickProps}>
       {(title || action) && (
         <header className="card-head">
           <h3>
@@ -52,13 +56,14 @@ export function Stat({ label, value, tone, icon: Icon, hint }) {
   )
 }
 
-export function Metric({ label, icon: Icon, value, tone, sub, visual, selected }) {
+export function Metric({ label, icon: Icon, value, tone, sub, visual, selected, onClick, hint }) {
   return (
-    <Card className={`metric ${selected ? 'selected' : ''}`}>
+    <Card className={`metric ${selected ? 'selected' : ''} ${onClick ? 'clickable' : ''}`} onClick={onClick} hint={hint}>
       <div className="metric-body">
         <div className="metric-label">
           {Icon && <Icon size={15} />}
           {label}
+          {hint && <span className="card-hint">{hint}</span>}
         </div>
         <div className={`metric-value ${tone || ''}`}>{value}</div>
         {sub && <div className="metric-sub">{sub}</div>}
@@ -149,8 +154,10 @@ export function Toggle({ checked, onChange, label }) {
   )
 }
 
-export function Expander({ title, icon: Icon, meta, children, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen)
+export function Expander({ title, icon: Icon, meta, children, defaultOpen = false, open: openProp, onToggle }) {
+  const [openState, setOpenState] = useState(defaultOpen)
+  const open = openProp ?? openState
+  const setOpen = onToggle || setOpenState
   return (
     <div className={`expander ${open ? 'open' : ''}`}>
       <button onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -198,6 +205,16 @@ export function Empty({ title, text, action, icon: Icon = Sparkles, compact }) {
   )
 }
 
+function useLockScroll() {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [])
+}
+
 function useEscape(onClose) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
@@ -208,7 +225,8 @@ function useEscape(onClose) {
 
 export function Modal({ title, onClose, children }) {
   useEscape(onClose)
-  return (
+  useLockScroll()
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
         <header className="modal-head">
@@ -219,13 +237,15 @@ export function Modal({ title, onClose, children }) {
         </header>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
 export function Drawer({ title, icon, onClose, children }) {
   useEscape(onClose)
-  return (
+  useLockScroll()
+  return createPortal(
     <>
       <div className="drawer-backdrop" onClick={onClose} />
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
@@ -239,7 +259,8 @@ export function Drawer({ title, icon, onClose, children }) {
         </header>
         {children}
       </aside>
-    </>
+    </>,
+    document.body,
   )
 }
 
@@ -292,7 +313,7 @@ export function FormModal({ title, fields, initial = {}, onSave, onClose, onDele
             {f.type === 'select' ? (
               <select value={values[f.name] ?? ''} onChange={(e) => set(f.name, e.target.value)} required={f.required}>
                 {!f.required && <option value="">—</option>}
-                {f.options.map((o) => {
+                {(values[f.name] && !f.options.some((o) => (Array.isArray(o) ? o[0] : o) === values[f.name]) ? [values[f.name], ...f.options] : f.options).map((o) => {
                   const [val, lab] = Array.isArray(o) ? o : [o, o]
                   return (
                     <option key={val} value={val}>
