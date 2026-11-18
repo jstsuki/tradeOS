@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
-  Flower2, Sprout, Trophy, Wallet, BookOpenText, ChartSpline, NotebookPen, LogOut,
+  Flower2, History, Sprout, Trophy, Wallet, BookOpenText, ChartSpline, NotebookPen, LogOut,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Bamboo } from './Botanicals'
@@ -13,6 +13,7 @@ export const NAV = [
   { to: '/playbook', label: 'Playbook', icon: BookOpenText },
   { to: '/analytics', label: 'Analytics', icon: ChartSpline },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
+  { to: '/history', label: 'History', icon: History },
 ]
 
 export default function Layout() {

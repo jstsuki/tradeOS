@@ -12,6 +12,7 @@ import Finances from './pages/Finances'
 import Playbook from './pages/Playbook'
 import Analytics from './pages/Analytics'
 import Journal from './pages/Journal'
+import History from './pages/History'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="playbook" element={<Playbook />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="journal" element={<Journal />} />
+            <Route path="history" element={<History />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

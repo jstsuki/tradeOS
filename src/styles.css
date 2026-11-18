@@ -487,3 +487,38 @@ code { background: var(--card-2); padding: 1px 6px; border-radius: 6px; font-siz
   .goal-body { justify-content: center; }
   .goal-side { min-width: 100%; text-align: center; }
 }
+
+/* ---------- History ---------- */
+.history { display: flex; flex-direction: column; gap: 12px; }
+.history-day { padding: 0; gap: 0; overflow: hidden; }
+.history-head {
+  width: 100%; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  border: 0; background: none; padding: 16px 20px; text-align: left;
+}
+.history-head:hover { background: rgba(247, 241, 227, 0.6); }
+.history-date { min-width: 130px; }
+.history-date strong { display: block; font-family: var(--font-head); }
+.history-date small { color: var(--ink-soft); font-weight: 700; }
+.history-badges { flex: 1; display: flex; gap: 6px; flex-wrap: wrap; }
+.hbadge { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; font-weight: 800; padding: 4px 10px; border-radius: 999px; background: var(--card-2); color: var(--ink-soft); }
+.hbadge.goal { background: #dcebc8; color: var(--pos); }
+.hbadge.warn { background: #fbefd8; color: #9a6b22; }
+.history-pnl { font-family: var(--font-head); font-size: 1.15rem; min-width: 80px; text-align: right; }
+.history-chev { color: var(--ink-soft); transition: transform 0.25s; }
+.history-day.open .history-chev { transform: rotate(180deg); }
+.history-body { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; padding: 4px 20px 20px; border-top: 1px dashed var(--line); padding-top: 16px; animation: fade 0.25s ease; }
+.history-sub { display: flex; align-items: center; gap: 6px; font-size: 0.92rem; margin-bottom: 10px; color: var(--leaf-dark); }
+.history-checks { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+.history-checks li { display: flex; align-items: center; gap: 8px; }
+.history-checks .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.history-checks .yes .dot { background: var(--leaf); }
+.history-checks .no { color: var(--ink-soft); }
+.history-checks .no .dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line); }
+.trade-row.static { cursor: default; }
+.trade-row.static:hover { background: none; }
+@media (max-width: 760px) {
+  .history-body { grid-template-columns: 1fr; }
+  .history-pnl { min-width: 0; margin-left: auto; }
+  .history-badges { order: 3; flex-basis: 100%; }
+  .bottom-link span { font-size: 0.52rem; }
+}
