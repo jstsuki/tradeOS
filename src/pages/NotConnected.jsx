@@ -1,10 +1,9 @@
-import { MatchaBowl } from '../components/Botanicals'
 
 export default function NotConnected() {
   return (
     <div className="login">
       <div className="login-card">
-        <MatchaBowl className="login-bowl" />
+        <div className="brand-mark">M</div>
         <h1>Almost ready</h1>
         <p className="muted">
           MarketOS isn’t connected to Supabase yet. Add <code>VITE_SUPABASE_URL</code> and{' '}

@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react'
-import { X, Trash2 } from 'lucide-react'
-import { MatchaSprig } from './Botanicals'
+import { useEffect, useId, useState } from 'react'
+import { X, Trash2, ChevronDown, Sparkles } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { chartTooltip } from '../pages/chartTheme'
 
-export function Card({ title, icon: Icon, action, className = '', children }) {
+export function Card({ title, icon: Icon, action, className = '', children, onClick }) {
   return (
-    <section className={`card ${className}`}>
+    <section className={`card ${className}`} onClick={onClick}>
       {(title || action) && (
         <header className="card-head">
           <h3>
             {Icon && (
               <span className="card-icon">
-                <Icon size={16} />
+                <Icon size={15} />
               </span>
             )}
             {title}
@@ -23,15 +24,13 @@ export function Card({ title, icon: Icon, action, className = '', children }) {
   )
 }
 
-export function PageHeader({ title, subtitle, art, children }) {
+// Compact row of page controls (filters on the left, actions on the right).
+export function Toolbar({ children, actions }) {
   return (
-    <div className="page-header">
-      <div>
-        <h1>{title}</h1>
-        {subtitle && <p className="muted">{subtitle}</p>}
-      </div>
-      <div className="page-header-actions">{children}</div>
-      {art && <div className="page-header-art">{art}</div>}
+    <div className="toolbar">
+      {children}
+      <span className="spacer" />
+      {actions}
     </div>
   )
 }
@@ -41,10 +40,10 @@ export function Stat({ label, value, tone, icon: Icon, hint }) {
     <div className={`stat ${tone || ''}`}>
       {Icon && (
         <span className="stat-icon">
-          <Icon size={18} />
+          <Icon size={16} />
         </span>
       )}
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div className="stat-label">{label}</div>
         <div className="stat-value">{value}</div>
         {hint && <div className="stat-hint">{hint}</div>}
@@ -53,52 +52,145 @@ export function Stat({ label, value, tone, icon: Icon, hint }) {
   )
 }
 
-export function ProgressRing({ value, size = 150, stroke = 14, children }) {
+export function Metric({ label, icon: Icon, value, tone, sub, visual, selected }) {
+  return (
+    <Card className={`metric ${selected ? 'selected' : ''}`}>
+      <div className="metric-body">
+        <div className="metric-label">
+          {Icon && <Icon size={15} />}
+          {label}
+        </div>
+        <div className={`metric-value ${tone || ''}`}>{value}</div>
+        {sub && <div className="metric-sub">{sub}</div>}
+      </div>
+      {visual}
+    </Card>
+  )
+}
+
+export function Delta({ value, suffix = '' }) {
+  if (value == null || !isFinite(value)) return null
+  const up = value >= 0
+  return (
+    <span className={`delta ${up ? 'up' : 'down'}`}>
+      {up ? '▲' : '▼'} {Math.abs(Math.round(value))}
+      {suffix}
+    </span>
+  )
+}
+
+export function ProgressRing({ value, size = 64, stroke = 7, colors = ['#F16A9B', '#A99BFF'], children }) {
+  const id = useId().replace(/:/g, '')
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   const v = Math.max(0, Math.min(1, value || 0))
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setShown(v))
+    return () => cancelAnimationFrame(t)
+  }, [v])
   return (
     <div className="ring" style={{ width: size, height: size }}>
       <svg width={size} height={size}>
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--ring-track)" strokeWidth={stroke} fill="none" />
+        <defs>
+          <linearGradient id={`rg${id}`} x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0" stopColor={colors[0]} />
+            <stop offset="1" stopColor={colors[1]} />
+          </linearGradient>
+        </defs>
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.07)" strokeWidth={stroke} fill="none" />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke="url(#ringGrad)"
+          stroke={`url(#rg${id})`}
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
           strokeDasharray={c}
-          strokeDashoffset={c * (1 - v)}
+          strokeDashoffset={c * (1 - shown)}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ transition: 'stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)' }}
+          style={{ transition: 'stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1)' }}
         />
-        <defs>
-          <linearGradient id="ringGrad" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor="var(--leaf-light)" />
-            <stop offset="1" stopColor="var(--leaf-dark)" />
-          </linearGradient>
-        </defs>
       </svg>
       <div className="ring-center">{children}</div>
     </div>
   )
 }
 
-export function Bar({ value, tone = '' }) {
+export function Bar({ value, tone = '', thin }) {
   const v = Math.max(0, Math.min(1, value || 0))
   return (
-    <div className={`bar ${tone}`}>
+    <div className={`bar ${tone} ${thin ? 'thin' : ''}`}>
       <span style={{ width: `${v * 100}%` }} />
     </div>
   )
 }
 
-export function Empty({ title, text, action }) {
+export function Seg({ options, value, onChange }) {
   return (
-    <div className="empty">
-      <MatchaSprig className="empty-art" />
+    <div className="seg" role="tablist">
+      {options.map(([v, l]) => (
+        <button key={v} className={value === v ? 'on' : ''} onClick={() => onChange(v)} role="tab" aria-selected={value === v}>
+          {l}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function Toggle({ checked, onChange, label }) {
+  return (
+    <label className="toggle">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="sw" />
+      {label}
+    </label>
+  )
+}
+
+export function Expander({ title, icon: Icon, meta, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className={`expander ${open ? 'open' : ''}`}>
+      <button onClick={() => setOpen(!open)} aria-expanded={open}>
+        {Icon && <Icon size={15} className="muted" />}
+        {title}
+        <span className="exp-meta">
+          {meta}
+          <ChevronDown size={16} className="chev" />
+        </span>
+      </button>
+      {open && <div className="exp-body">{children}</div>}
+    </div>
+  )
+}
+
+export function Donut({ data, size = 140, colors, center }) {
+  const total = data.reduce((t, d) => t + d.value, 0)
+  return (
+    <div style={{ width: size, height: size, position: 'relative', flexShrink: 0 }}>
+      <ResponsiveContainer>
+        <PieChart>
+          <Pie data={total ? data : [{ name: 'none', value: 1 }]} dataKey="value" innerRadius="70%" outerRadius="100%" paddingAngle={total && data.length > 1 ? 3 : 0} stroke="none" startAngle={90} endAngle={-270} isAnimationActive>
+            {(total ? data : [{}]).map((d, i) => (
+              <Cell key={i} fill={total ? colors[i % colors.length] : 'rgba(255,255,255,0.07)'} />
+            ))}
+          </Pie>
+          {total > 0 && <Tooltip {...chartTooltip} formatter={(v, n) => [Number(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }), n]} />}
+        </PieChart>
+      </ResponsiveContainer>
+      {center && <div className="ring-center" style={{ pointerEvents: 'none' }}>{center}</div>}
+    </div>
+  )
+}
+
+export function Empty({ title, text, action, icon: Icon = Sparkles, compact }) {
+  return (
+    <div className={`empty ${compact ? 'compact' : ''}`}>
+      <span className="empty-icon">
+        <Icon size={20} />
+      </span>
       <h4>{title}</h4>
       {text && <p className="muted">{text}</p>}
       {action}
@@ -106,12 +198,16 @@ export function Empty({ title, text, action }) {
   )
 }
 
-export function Modal({ title, onClose, children }) {
+function useEscape(onClose) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+}
+
+export function Modal({ title, onClose, children }) {
+  useEscape(onClose)
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
@@ -127,14 +223,33 @@ export function Modal({ title, onClose, children }) {
   )
 }
 
-// Generic add/edit form. `fields`: [{ name, label, type, options, required, full, placeholder }]
+export function Drawer({ title, icon, onClose, children }) {
+  useEscape(onClose)
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+        <header className="drawer-head">
+          {icon}
+          <h3>{title}</h3>
+          <span className="spacer" />
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </header>
+        {children}
+      </aside>
+    </>
+  )
+}
+
+// Generic add/edit form. `fields`: [{ name, label, type, options, required, full, placeholder, hint }]
 export function FormModal({ title, fields, initial = {}, onSave, onClose, onDelete }) {
   const [values, setValues] = useState(() => {
     const v = {}
     for (const f of fields) {
-      const iv = initial[f.name]
-      v[f.name] =
-        f.type === 'checkbox' ? (iv ?? f.default ?? false) : iv ?? f.default ?? ''
+      const iv = initial?.[f.name]
+      v[f.name] = f.type === 'checkbox' ? (iv ?? f.default ?? false) : iv ?? f.default ?? ''
     }
     return v
   })
@@ -168,7 +283,12 @@ export function FormModal({ title, fields, initial = {}, onSave, onClose, onDele
       <form onSubmit={submit} className="form-grid">
         {fields.map((f) => (
           <label key={f.name} className={`field ${f.full || f.type === 'textarea' ? 'full' : ''} ${f.type === 'checkbox' ? 'check' : ''}`}>
-            {f.type !== 'checkbox' && <span>{f.label}{f.required && ' *'}</span>}
+            {f.type !== 'checkbox' && (
+              <span>
+                {f.label}
+                {f.required && ' *'}
+              </span>
+            )}
             {f.type === 'select' ? (
               <select value={values[f.name] ?? ''} onChange={(e) => set(f.name, e.target.value)} required={f.required}>
                 {!f.required && <option value="">—</option>}
@@ -198,6 +318,7 @@ export function FormModal({ title, fields, initial = {}, onSave, onClose, onDele
                 onChange={(e) => set(f.name, e.target.value)}
               />
             )}
+            {f.hint && <span className="field-hint">{f.hint}</span>}
           </label>
         ))}
         {err && <p className="error full">{err}</p>}
@@ -245,16 +366,12 @@ export function DeleteButton({ onConfirm, label = 'Delete' }) {
 export function Loading() {
   return (
     <div className="loading">
-      <span className="leaf-spin" />
+      <span className="spinner" />
     </div>
   )
 }
 
 export function ErrorNote({ error }) {
   if (!error) return null
-  return (
-    <p className="error">
-      Couldn’t load data: {error}. If this is the first time, make sure the database setup step was run in Supabase.
-    </p>
-  )
+  return <p className="error">Couldn’t load data: {error}</p>
 }

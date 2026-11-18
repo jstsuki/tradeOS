@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { MatchaBowl, SakuraBranch } from '../components/Botanicals'
 
 // Private app: log in only. New accounts are not created from this page.
 export default function Login() {
@@ -20,11 +19,10 @@ export default function Login() {
 
   return (
     <div className="login">
-      <SakuraBranch className="login-sakura" />
       <form className="login-card" onSubmit={submit}>
-        <MatchaBowl className="login-bowl" />
+        <div className="brand-mark">M</div>
         <h1>MarketOS</h1>
-        <p className="muted">Welcome back to your garden</p>
+        <p className="muted">Welcome back</p>
         <label className="field">
           <span>Email</span>
           <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />

@@ -5,9 +5,8 @@ import {
 } from 'recharts'
 import { useTable } from '../lib/useTable'
 import { money, signedMoney, sum, pct, pnlClass, todayISO } from '../lib/format'
-import { Card, PageHeader, Stat, Empty, Loading, ErrorNote } from '../components/ui'
-import { Bamboo } from '../components/Botanicals'
-import { chartTooltip } from './chartTheme'
+import { Card, Toolbar, Stat, Empty, Loading, ErrorNote, Seg } from '../components/ui'
+import { C, chartTooltip, axis, shortMoney } from './chartTheme'
 
 const RANGES = [['7', '7 days'], ['30', '30 days'], ['90', '90 days'], ['all', 'All time']]
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -96,23 +95,19 @@ export default function Analytics() {
 
   return (
     <div className="page">
-      <PageHeader title="Performance analytics" subtitle="Patterns that help your garden grow" art={<Bamboo />}>
+      <Toolbar>
+        <Seg value={range} onChange={setRange} options={RANGES} />
         <select className="mini-select" value={acct} onChange={(e) => setAcct(e.target.value)} aria-label="Filter by account">
           <option value="">All accounts</option>
           {accounts.rows.map((a) => <option key={a.id} value={a.id}>{a.firm}{a.label ? ` · ${a.label}` : ''}</option>)}
         </select>
-      </PageHeader>
-      <div className="chips">
-        {RANGES.map(([v, l]) => (
-          <button key={v} className={`chip ${range === v ? 'on' : ''}`} onClick={() => setRange(v)}>{l}</button>
-        ))}
-      </div>
+      </Toolbar>
       <ErrorNote error={trades.error} />
 
       {trades.loading ? (
         <Loading />
       ) : rows.length === 0 ? (
-        <Empty title="No trades in this range" text="Analytics bloom once you log real trades in your journal." />
+        <Card><Empty icon={ChartSpline} title="No trades in this range" text="Analytics appear once you log real trades in your journal." /></Card>
       ) : (
         <>
           <div className="stats-row">
@@ -133,15 +128,15 @@ export default function Analytics() {
               <AreaChart data={equity}>
                 <defs>
                   <linearGradient id="eq" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0" stopColor="var(--leaf)" stopOpacity=".45" />
-                    <stop offset="1" stopColor="var(--leaf)" stopOpacity="0" />
+                    <stop offset="0" stopColor={C.pink} stopOpacity=".45" />
+                    <stop offset="1" stopColor={C.pink} stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="var(--line)" />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} minTickGap={20} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} width={56} tickFormatter={(v) => money(v)} />
+                <CartesianGrid vertical={false} stroke={C.grid} />
+                <XAxis dataKey="date" {...axis} minTickGap={20} />
+                <YAxis {...axis} width={56} tickFormatter={shortMoney} />
                 <Tooltip {...chartTooltip} formatter={(v) => [signedMoney(v), 'Cumulative']} />
-                <Area type="monotone" dataKey="equity" stroke="var(--leaf-dark)" strokeWidth={2.5} fill="url(#eq)" />
+                <Area type="monotone" dataKey="equity" stroke={C.pink} strokeWidth={2.5} fill="url(#eq)" />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -171,21 +166,21 @@ function PnlBars({ data, horizontal }) {
   return (
     <ResponsiveContainer width="100%" height={h}>
       <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'}>
-        <CartesianGrid vertical={horizontal} horizontal={!horizontal} stroke="var(--line)" />
+        <CartesianGrid vertical={horizontal} horizontal={!horizontal} stroke={C.grid} />
         {horizontal ? (
           <>
-            <XAxis type="number" tickLine={false} axisLine={false} fontSize={12} tickFormatter={(v) => money(v)} />
-            <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} fontSize={12} width={110} />
+            <XAxis type="number" {...axis} tickFormatter={shortMoney} />
+            <YAxis type="category" dataKey="name" {...axis} width={110} tick={{ fill: '#A6A1B2', fontSize: 12 }} />
           </>
         ) : (
           <>
-            <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
-            <YAxis tickLine={false} axisLine={false} fontSize={12} width={56} tickFormatter={(v) => money(v)} />
+            <XAxis dataKey="name" {...axis} />
+            <YAxis {...axis} width={56} tickFormatter={shortMoney} />
           </>
         )}
         <Tooltip {...chartTooltip} formatter={(v) => [signedMoney(v), 'P&L']} />
         <RBar dataKey="pnl" radius={horizontal ? [0, 8, 8, 0] : [8, 8, 0, 0]}>
-          {data.map((d, i) => <Cell key={i} fill={d.pnl >= 0 ? 'var(--leaf)' : 'var(--sakura-dark)'} />)}
+          {data.map((d, i) => <Cell key={i} fill={d.pnl >= 0 ? C.violet : C.pink} />)}
         </RBar>
       </BarChart>
     </ResponsiveContainer>

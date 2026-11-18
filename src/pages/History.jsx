@@ -4,8 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useTable } from '../lib/useTable'
 import { useSettings } from '../lib/settings'
 import { signedMoney, sum, niceDate, pnlClass, todayISO } from '../lib/format'
-import { Card, PageHeader, Bar, Empty, Loading, ErrorNote } from '../components/ui'
-import { SakuraBranch } from '../components/Botanicals'
+import { Card, Toolbar, Bar, Empty, Loading, ErrorNote, Seg } from '../components/ui'
 
 const RANGES = [['30', '30 days'], ['90', '90 days'], ['all', 'All time']]
 
@@ -53,18 +52,16 @@ export default function History() {
 
   return (
     <div className="page">
-      <PageHeader title="History" subtitle="Each day in your garden: preparation, trades and results" art={<SakuraBranch />} />
-      <div className="chips">
-        {RANGES.map(([v, l]) => (
-          <button key={v} className={`chip ${range === v ? 'on' : ''}`} onClick={() => setRange(v)}>{l}</button>
-        ))}
-      </div>
+      <Toolbar>
+        <Seg value={range} onChange={setRange} options={RANGES} />
+        <span className="toolbar-sub">Each day: prep, trades and result</span>
+      </Toolbar>
       <ErrorNote error={trades.error || checksErr} />
 
       {loading ? (
         <Loading />
       ) : days.length === 0 ? (
-        <Empty title="No history yet" text="Tick your market prep or log a trade, and each day will be kept here." />
+        <Card><Empty icon={HistoryIcon} title="No history yet" text="Tick your market prep or log a trade, and each day is kept here." /></Card>
       ) : (
         <div className="history">
           {days.map((d) => {
